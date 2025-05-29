@@ -100,12 +100,12 @@ class WKA(nn.Module):
         s2df = self.fft2d_torch(sig)
         print(f"After FFT - min: {torch.abs(s2df).min().item()}, max: {torch.abs(s2df).max().item()}")
 
-        # 2. 频域匹配滤波（距离压缩 + RCMC补偿）
+        # 2. 频域匹配滤波（一致压缩）
         s2df_matched = self.matched_filtering_torch(s2df)
         print(
             f"After matched filter - min: {torch.abs(s2df_matched).min().item()}, max: {torch.abs(s2df_matched).max().item()}")
 
-        # 3. Stolt插值（解决距离弯曲）
+        # 3. Stolt插值（补余压缩）
         s2df_stolt = self.stolt_interpolation_torch(s2df_matched)
         print(
             f"After Stolt interpolation - min: {torch.abs(s2df_stolt).min().item()}, max: {torch.abs(s2df_stolt).max().item()}")
