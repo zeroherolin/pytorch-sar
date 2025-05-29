@@ -1,6 +1,6 @@
 # Pytorch-based SAR Imaging
 
-<img src="assets/flow.png" height=900/>
+<img src="assets/flow.png" width=900/>
 
 ## ωKA (Wavenumber Domain Algorithm)
 
