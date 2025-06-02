@@ -1,57 +1,68 @@
-import math
 import torch
-from numpy import kaiser
-
-from params import Config
-
-# 创建Kaiser窗 (w1)
-w1 = torch.tensor(kaiser(Config().Nrg, beta=2.5), dtype=torch.float64)
-w1 = w1.repeat(Config().Naz, 1)
 
 
 class SignalGenerator:
     def __init__(self, config):
         self.config = config
-        print("Initializing signal generator...")
 
-        # 计算时间轴参数
-        dr = 1 / config.Fr
-        da = 1 / config.Fa
+        # 计算采样点数
+        Na = int(round(config.Ra * config.Fa / config.Vr))  # 方位向采样点数
+        Nr = int(round((2 * (config.Rmax - config.Rmin) / config.c + config.Tr) * config.Fr))  # 距离向采样点数
 
-        # 创建距离时间轴 (tr)
-        tr = torch.arange(-config.Nrg / 2, config.Nrg / 2, dtype=torch.float64) * dr + 2 * config.Rref / config.c
-        tr = tr.repeat(config.Naz, 1)
+        # 创建慢时间轴 (方位向时间)
+        eta_start = -config.Ra / (2 * config.Vr)
+        eta_end = eta_start + (Na - 1) / config.Fa
+        self.eta = torch.linspace(eta_start, eta_end, Na, dtype=torch.float64)
 
-        # 创建方位时间轴 (ta)
-        ta = torch.arange(0, config.Naz, dtype=torch.float64) * da
-        ta = ta.reshape(-1, 1).repeat(1, config.Nrg)
+        # 创建快时间轴 (距离向时间)
+        tao_start = 2 * config.Rmin / config.c - config.Tr / 2
+        tao_end = tao_start + (Nr - 1) / config.Fr
+        self.tau = torch.linspace(tao_start, tao_end, Nr, dtype=torch.float64)
 
-        self.tr = tr
-        self.ta = ta
+        # 平台位置 (沿航迹方向)
+        self.y = config.Vr * self.eta
+
+        # 更新配置参数
+        config.Na = Na  # 方位向采样点数
+        config.Nr = Nr  # 距离向采样点数
+
+    def rectpuls(self, t, width):
+        return torch.where((t >= -width / 2) & (t <= width / 2),
+                           torch.ones_like(t, dtype=torch.complex128),
+                           torch.zeros_like(t, dtype=torch.complex128))
 
     def generate_signal(self, targets):
         config = self.config
+        # 初始化接收信号矩阵
+        signal_receive = torch.zeros((config.Na, config.Nr), dtype=torch.complex128)
+        targets_tensor = torch.tensor(targets, dtype=torch.float64)
 
-        # 初始化信号矩阵
-        sig = torch.zeros((config.Naz, config.Nrg), dtype=torch.complex128)
+        # 存储每个目标在每个慢时间时刻的斜距
+        r_eta = torch.zeros((len(targets), config.Na), dtype=torch.float64)
 
-        # 生成每个目标的信号
-        for x, y in targets:
-            # 计算斜距历史
-            r = torch.sqrt(torch.tensor(x ** 2, dtype=torch.float64) +
-                           (torch.tensor(y, dtype=torch.float64) - config.Vr * self.ta) ** 2)
+        # 生成每个目标的回波信号
+        for i in range(len(targets)):
+            target_x, target_y = targets_tensor[i, 0], targets_tensor[i, 1]
+            # 计算目标在慢时间轴上的瞬时斜距
+            r_eta[i, :] = torch.sqrt(target_x ** 2 + (target_y - self.y) ** 2 + config.H ** 2)
 
-            # 计算双程延迟
-            delay = 2 * r / config.c
+            # 遍历每个慢时间点
+            for j in range(config.Na):
+                # 方位向照射范围约束 (仅处理在波束照射范围内的目标)
+                if torch.abs(target_y - self.y[j]) >= config.Ls / 2:
+                    continue
 
-            # 计算脉冲存在的时间范围
-            limit = torch.abs(self.tr - delay) < config.Tr / 2
+                # 计算双程延迟时间
+                delay = 2 * r_eta[i, j] / config.c
 
-            # 计算线性调频信号和相位项
-            chirp = torch.exp(1j * math.pi * config.Kr * (self.tr - delay) ** 2)
-            phase = torch.exp(-1j * 4 * math.pi * config.fc * r / config.c)
+                # 生成距离向矩形包络
+                rect_pulse = self.rectpuls(self.tau - delay, config.Tr)
 
-            # 叠加目标信号
-            sig += w1 * limit * chirp * phase
+                # 计算相位项 (载频相位 + 线性调频相位)
+                amplitude = torch.exp(-1j * 4 * torch.pi * config.f0 * r_eta[i, j] / config.c)
+                chirp_phase = torch.exp(1j * torch.pi * config.Kr * (self.tau - delay) ** 2)
 
-        return sig
+                # 累加到接收信号矩阵
+                signal_receive[j, :] += rect_pulse * amplitude * chirp_phase
+
+        return signal_receive

@@ -2,117 +2,146 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 import sys
+import time
 
 from params import Config
-from sig_gen import SignalGenerator, w1
+from sig_gen import SignalGenerator
 
 
 class WKA(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, device='cuda' if torch.cuda.is_available() else 'cpu'):
         super().__init__()
         self.config = config
-        print("Initializing WKA processor...")
+        self.device = device
+        print(f"Initializing optimized WKA processor on {device}...")
+
+        # 将参数转移到device
+        self.Vr = torch.tensor(config.Vr, dtype=torch.float64, device=self.device)
+        self.theta_c = torch.tensor(config.theta_c, dtype=torch.float64, device=self.device)
+        self.lamda = torch.tensor(config.lamda, dtype=torch.float64, device=self.device)
+        self.Fr = torch.tensor(config.Fr, dtype=torch.float64, device=self.device)
+        self.Fa = torch.tensor(config.Fa, dtype=torch.float64, device=self.device)
+        self.R_ref = torch.tensor(config.R_ref, dtype=torch.float64, device=self.device)
+        self.c = torch.tensor(config.c, dtype=torch.float64, device=self.device)
+        self.f0 = torch.tensor(config.f0, dtype=torch.float64, device=self.device)
+        self.Kr = torch.tensor(config.Kr, dtype=torch.float64, device=self.device)
 
         # 创建距离频率轴 (fr) 和方位频率轴 (fa)
-        fr = torch.arange(-config.Nrg / 2, config.Nrg / 2, dtype=torch.float64) * config.Fr / config.Nrg
-        fa = torch.arange(-config.Naz / 2, config.Naz / 2, dtype=torch.float64) * config.Fa / config.Naz + config.fac
-        self.fr = fr.repeat(config.Naz, 1)
-        self.fa = fa.reshape(-1, 1).repeat(1, config.Nrg)
+        f_eta_ref = 2 * self.Vr * torch.sin(self.theta_c) / self.lamda
+        f_tau = torch.arange(-config.Nr / 2, config.Nr / 2, dtype=torch.float64, device=device) * config.Fr / config.Nr
+        f_eta = torch.arange(-config.Na / 2, config.Na / 2, dtype=torch.float64, device=device) * config.Fa / config.Na + f_eta_ref
+
+        # 创建频率网格
+        self.f_tau = f_tau.repeat(config.Na, 1)
+        self.f_eta = f_eta.reshape(-1, 1).repeat(1, config.Nr)
 
         # 二维频域匹配滤波器
-        self.h2df = torch.exp(
-            1j * (4 * torch.pi * config.Rref / config.c *
-                  torch.sqrt((config.fc + self.fr) ** 2 - config.c ** 2 * self.fa ** 2 / (4 * config.Vr ** 2)) +
-                  torch.pi * self.fr ** 2 / config.Kr)
-        )
+        self.h2df = torch.exp(1j * (4 * torch.pi * self.R_ref / self.c * torch.sqrt(
+            (self.f0 + self.f_tau) ** 2 - self.c ** 2 * self.f_eta ** 2 / (
+                        4 * self.Vr ** 2)) + torch.pi * self.f_tau ** 2 / self.Kr))
 
         print(f"Filter shape: {self.h2df.shape}")
-        print(f"Filter min amplitude: {torch.abs(self.h2df).min().item()}")
-        print(f"Filter max amplitude: {torch.abs(self.h2df).max().item()}")
 
     @staticmethod
     def fft2d_torch(x):
-        print("Performing 2D FFT...")
-        x = torch.fft.fftshift(x, dim=(-2, -1))
         x = torch.fft.fft2(x, dim=(-2, -1))
         x = torch.fft.fftshift(x, dim=(-2, -1))
         return x
 
     @staticmethod
     def ifft2d_torch(x):
-        print("Performing 2D IFFT...")
-        x = torch.fft.fftshift(x, dim=(-2, -1))
+        x = torch.fft.ifftshift(x, dim=(-2, -1))
         x = torch.fft.ifft2(x, dim=(-2, -1))
-        x = torch.fft.fftshift(x, dim=(-2, -1))
         return x
 
     def matched_filtering_torch(self, sig):
-        print("Applying matched filter...")
+        if sig.device != self.h2df.device:
+            sig = sig.to(self.h2df.device)
         s2df = sig * self.h2df
         return s2df
 
     def stolt_interpolation_torch(self, sig):
-        print("Performing Stolt interpolation...")
-        config = self.config
-        Pi = 8 # 插值窗口宽度
+        Pi = 6  # 插值窗口宽度
 
-        # 计算 Stolt 插值的变换坐标
-        D_fr = torch.sqrt((self.fr + config.fc) ** 2 + (self.fa * config.c / (2 * config.Vr)) ** 2) - (self.fr + config.fc)
-        Ndkx = torch.round(D_fr * config.Nrg / config.Fr).to(torch.int)
-        Deci = D_fr * config.Nrg / config.Fr - Ndkx
-        Nd = torch.max(torch.abs(Ndkx)).item()
+        # 1. 计算Stolt映射关系
+        f_tao_pie = torch.sqrt((self.f0 + self.f_tau) ** 2 -
+                               (self.c * self.f_eta / (2 * self.Vr)) ** 2) - self.f0
 
-        # 创建填充信号
-        pad_left_part = sig[:, - (Nd + Pi + 1):]
-        pad_right_part = sig[:, :Nd + Pi]
-        pad_sig = torch.cat([pad_left_part, sig, pad_right_part], dim=1)
+        # 2. 计算采样点偏移量
+        delta_n = (f_tao_pie - self.f_tau) * (self.config.Nr / (2 * self.Fr))
 
-        # 初始化 Stolt 插值结果
-        stolt = torch.zeros((config.Naz, config.Nrg), dtype=torch.complex128)
+        # 3. 准备插值索引和权重
+        # 创建插值偏移索引
+        offsets = torch.arange(-Pi // 2, Pi // 2 + 1, dtype=torch.float64, device=self.device)
 
-        # 执行 Stolt 插值
-        for m in range(config.Naz):
-            for n in range(Pi - 1, config.Nrg):
-                # 生成 sinc 插值核
-                h = torch.sinc(torch.arange(Deci[m, n].item() + Pi / 2 - 1, Deci[m, n].item() - Pi / 2 - 1, -1, dtype=torch.float64))
+        # 扩展维度用于广播计算
+        delta_n_exp = delta_n.unsqueeze(2)  # [Na, Nr, 1]
+        offsets_exp = offsets.view(1, 1, -1)  # [1, 1, Pi]
 
-                # 提取窗口数据
-                start_idx = n + Nd + Pi + Ndkx[m, n].item() - Pi // 2
-                end_idx = n + Nd + Pi + Ndkx[m, n].item() + Pi // 2
-                d = pad_sig[m, start_idx:end_idx]
+        # 计算所有位置的索引
+        indices = torch.arange(self.config.Nr, device=self.device).view(1, -1, 1) + offsets_exp  # [1, Nr, Pi]
 
-                # 应用插值
-                stolt[m, n] = torch.dot(torch.complex(h, torch.zeros(h.shape, dtype=torch.float64)), d.conj())
+        # 边界处理：越界索引设为边界值
+        indices = indices.clamp(0, self.config.Nr - 1)
 
-        # 旋转数据以对齐坐标系
-        stolt = torch.rot90(stolt, 2)
+        # 计算sinc权重
+        diff = delta_n_exp - offsets_exp  # [Na, Nr, Pi]
+        weights = torch.sinc(diff)  # sinc(x) = sin(πx)/(πx)
+
+        # 4. 执行向量化插值
+        # 为每个方位向收集样本值
+        stolt = torch.zeros((self.config.Na, self.config.Nr), dtype=torch.complex128, device=self.device)
+
+        # 分批次处理方位向以避免内存溢出
+        batch_size = 32  # 根据GPU内存调整
+        for m_start in range(0, self.config.Na, batch_size):
+            m_end = min(m_start + batch_size, self.config.Na)
+            m_slice = slice(m_start, m_end)
+
+            # 获取当前批次的信号切片 [batch, Nr]
+            sig_batch = sig[m_slice, :]
+
+            # 为当前批次收集插值样本 [batch, Nr, Pi]
+            samples = torch.gather(
+                sig_batch.unsqueeze(2).expand(-1, -1, Pi + 1),
+                1,
+                indices.expand(m_end - m_start, -1, -1).long()
+            )
+
+            # 应用权重 [batch, Nr, Pi]
+            weighted_samples = samples * weights[m_slice, :, :]
+
+            # 沿偏移维度求和 [batch, Nr]
+            stolt_batch = weighted_samples.sum(dim=2)
+
+            stolt[m_slice, :] = stolt_batch
 
         return stolt
 
     def forward(self, sig):
-        print("\nStarting WKA processing...")
-        # 0. 检查输入信号
-        print(f"Input signal shape: {sig.shape}")
-        print(f"Input signal min: {torch.abs(sig).min().item()}")
-        print(f"Input signal max: {torch.abs(sig).max().item()}")
+        print("\nStarting optimized WKA processing...")
+        start_time = time.time()
 
         # 1. 二维FFT变换到频域
+        print("Performing FFT 2D...")
         s2df = self.fft2d_torch(sig)
-        print(f"After FFT - min: {torch.abs(s2df).min().item()}, max: {torch.abs(s2df).max().item()}")
+        print(f"2D FFT completed in {time.time() - start_time:.2f}s")
 
-        # 2. 频域匹配滤波（一致压缩）
+        # 2. 频域匹配滤波
+        print("Performing Matched Filtering...")
         s2df_matched = self.matched_filtering_torch(s2df)
-        print(
-            f"After matched filter - min: {torch.abs(s2df_matched).min().item()}, max: {torch.abs(s2df_matched).max().item()}")
+        print(f"Matched filtering completed in {time.time() - start_time:.2f}s")
 
-        # 3. Stolt插值（补余压缩）
+        # 3. Stolt插值
+        print("Performing Stolt Iinterpolation...")
+        stolt_start = time.time()
         s2df_stolt = self.stolt_interpolation_torch(s2df_matched)
-        print(
-            f"After Stolt interpolation - min: {torch.abs(s2df_stolt).min().item()}, max: {torch.abs(s2df_stolt).max().item()}")
+        print(f"Stolt interpolation completed in {time.time() - stolt_start:.2f}s")
 
         # 4. 二维IFFT到图像
-        image = w1 * self.ifft2d_torch(s2df_stolt)
-        print(f"After IFFT - min: {torch.abs(image).min().item()}, max: {torch.abs(image).max().item()}")
+        print("Performing IFFT 2D...")
+        image = self.ifft2d_torch(s2df_stolt)
+        print(f"Total processing time: {time.time() - start_time:.2f}s")
 
         return s2df, s2df_matched, s2df_stolt, image
 
@@ -121,57 +150,60 @@ if __name__ == "__main__":
     sys.setrecursionlimit(10000)
 
     config = Config()
-    print("Configuration:")
-    print(f"  Range samples (Nrg): {config.Nrg}")
-    print(f"  Azimuth samples (Naz): {config.Naz}")
-    print(f"  Reference range (Rref): {config.Rref} m")
-    print(f"  Pulse duration (Tr): {config.Tr} s")
-    print(f"  Chirp rate (Kr): {config.Kr} Hz/s")
 
-    # 创建信号生成器
     generator = SignalGenerator(config)
 
-    # 创建点目标场景
     targets = [
-        (19892.69596844, 1266.68940729),
-        (19962.69596844, 1270.9707907),
-        (20032.69596844, 1275.25217411)
+        (config.Xc, config.Yc),  # 场景中心
+        (config.Xc + 500, config.Yc + 300),
+        (config.Xc + 500, config.Yc - 300),
+        (config.Xc - 500, config.Yc + 300),
+        (config.Xc - 500, config.Yc - 300),
+        (config.Xc + 800, config.Yc),
+        (config.Xc - 800, config.Yc),
+        (config.Xc, config.Yc + 600),
+        (config.Xc, config.Yc - 600)
     ]
 
     print("\nTarget positions:")
     for i, (x, y) in enumerate(targets):
         print(f"  Target {i + 1}: x={x:.2f}m, y={y:.2f}m")
 
-    # 生成原始回拨信号
     print("\nGenerating SAR signal...")
+    start_time = time.time()
     sar_signal = generator.generate_signal(targets)
-    print(sar_signal)
+    gen_time = time.time() - start_time
+    print(f"Signal generation completed in {gen_time:.2f} seconds")
 
-    # 创建WKA处理器
     wka = WKA(config)
-
-    # 处理信号得到图像
-    print("\nProcessing SAR signal with ωK algorithm...")
+    print("\nProcessing SAR signal with wK algorithm...")
     s2df, s2df_matched, s2df_stolt, image = wka.forward(sar_signal)
 
     sig_data = torch.abs(sar_signal).detach().cpu().numpy()
+    sig_2df = torch.abs(WKA.fft2d_torch(sar_signal)).detach().cpu().numpy()
     filter_data = torch.abs(WKA.ifft2d_torch(s2df_matched)).detach().cpu().numpy()
     stolt_data = torch.abs(image).detach().cpu().numpy()
 
     plt.figure()
-    plt.imshow(sig_data, aspect='auto', cmap='jet')
+    plt.imshow(sig_data, aspect='auto', cmap='jet', origin='upper')
     plt.title('Original Echo Signal')
     plt.xlabel('Range Bins')
     plt.ylabel('Azimuth Bins')
 
     plt.figure()
-    plt.imshow(filter_data, aspect='auto', cmap='jet')
+    plt.imshow(sig_2df, aspect='auto', cmap='jet', origin='upper')
+    plt.title('2D-F Echo Signal')
+    plt.xlabel('Range Bins')
+    plt.ylabel('Azimuth Bins')
+
+    plt.figure()
+    plt.imshow(filter_data, aspect='auto', cmap='jet', origin='lower')
     plt.title('Matched Filtered Signal')
     plt.xlabel('Range Bins')
     plt.ylabel('Azimuth Bins')
 
     plt.figure()
-    plt.imshow(stolt_data, aspect='auto', cmap='jet')
+    plt.imshow(stolt_data, aspect='auto', cmap='jet', origin='lower')
     plt.title('Stolt Interpolated Signal')
     plt.xlabel('Range Bins')
     plt.ylabel('Azimuth Bins')
