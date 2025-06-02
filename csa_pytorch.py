@@ -34,7 +34,6 @@ class CSA(nn.Module):
         self.f_tau = f_tau.repeat(config.Na, 1) # [Na, Nr]
         self.f_eta = f_eta.reshape(-1, 1).repeat(1, config.Nr) # [Na, Nr]
 
-
         # 预计算徙动参数
         self.D_feta_Vr = torch.sqrt(1 - (self.c * self.f_eta) ** 2 / (4 * self.Vr ** 2 * self.f0 ** 2))
 
@@ -60,8 +59,7 @@ class CSA(nn.Module):
                                     self.R_ref * self.f_tau)
 
         # 预计算方位压缩相位因子
-        self.azimuth_comp_phase = torch.exp(1j * 4 * torch.pi * self.R_ref * self.f0 *
-                                            self.D_feta_Vr / self.c)
+        self.azimuth_comp_phase = torch.exp(1j * 4 * torch.pi * self.R_ref * self.f0 * self.D_feta_Vr / self.c)
 
     @staticmethod
     def fft1d_torch(x, dim=-1):
@@ -131,7 +129,7 @@ class CSA(nn.Module):
         tau = torch.linspace(2 * self.config.Rmin / self.c - self.config.Tr / 2,
                              2 * self.config.Rmax / self.c + self.config.Tr / 2,
                              self.config.Nr, dtype=torch.float64, device=self.device)
-        tau_mtx = tau.unsqueeze(0).repeat(self.config.Na, 1)  # [Na, Nr]
+        tau_mtx = tau.unsqueeze(0).repeat(self.config.Na, 1) # [Na, Nr]
 
         # 1. 方位向FFT (到距离多普勒域)
         print("Performing Azimuth FFT...")

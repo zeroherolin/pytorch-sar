@@ -60,7 +60,7 @@ class WKA(nn.Module):
         return s2df
 
     def stolt_interpolation_torch(self, sig):
-        Pi = 6  # 插值窗口宽度
+        Pi = 6 # 插值窗口宽度
 
         # 计算Stolt映射关系
         f_tao_pie = torch.sqrt((self.f0 + self.f_tau) ** 2 -
@@ -88,7 +88,7 @@ class WKA(nn.Module):
 
         # 执行向量化插值，分批次处理方位向以避免内存溢出
         stolt_2df = torch.zeros((self.config.Na, self.config.Nr), dtype=torch.complex128, device=self.device)
-        batch_size = 32  # 根据GPU内存调整
+        batch_size = 32 # 根据GPU内存调整
         for m_start in range(0, self.config.Na, batch_size):
             m_end = min(m_start + batch_size, self.config.Na)
             m_slice = slice(m_start, m_end)
