@@ -22,7 +22,7 @@ class Config:
         # 场景参数
         self.Xc = math.sqrt(self.R0 ** 2 - self.H ** 2)                # 场景中心X坐标 (m)
         self.Yc = 0                                                    # 场景中心Y坐标 (m)
-        self.Xo = 1000                                                 # 场景半宽X (m)
+        self.Xo = 500                                                  # 场景半宽X (m)
         self.Yo = 300                                                  # 场景半宽Y (m)
 
         # 采样参数

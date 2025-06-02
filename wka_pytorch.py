@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import sys
 import time
 
 from params import Config
@@ -28,19 +27,17 @@ class WKA(nn.Module):
 
         # 创建距离频率轴 (f_tau) 和方位频率轴 (f_eta)
         f_eta_ref = 2 * self.Vr * torch.sin(self.theta_c) / self.lamda
-        f_tau = torch.arange(-config.Nr / 2, config.Nr / 2, dtype=torch.float64, device=device) * config.Fr / config.Nr
-        f_eta = torch.arange(-config.Na / 2, config.Na / 2, dtype=torch.float64, device=device) * config.Fa / config.Na + f_eta_ref
+        f_tau = torch.linspace(-config.Fr / 2, config.Fr / 2, config.Nr, dtype=torch.float64, device=device)
+        f_eta = torch.linspace(-config.Fa / 2, config.Fa / 2, config.Na, dtype=torch.float64, device=device) + f_eta_ref
 
-        # 创建频率网格
-        self.f_tau = f_tau.repeat(config.Na, 1)
-        self.f_eta = f_eta.reshape(-1, 1).repeat(1, config.Nr)
+        # 扩展为矩阵用于向量化计算
+        self.f_tau = f_tau.repeat(config.Na, 1) # [Na, Nr]
+        self.f_eta = f_eta.reshape(-1, 1).repeat(1, config.Nr) # [Na, Nr]
 
-        # 二维频域匹配滤波器
+        # 预计算二维频域匹配滤波器
         self.h2df = torch.exp(1j * (4 * torch.pi * self.R_ref / self.c * torch.sqrt(
             (self.f0 + self.f_tau) ** 2 - self.c ** 2 * self.f_eta ** 2 / (
                         4 * self.Vr ** 2)) + torch.pi * self.f_tau ** 2 / self.Kr))
-
-        print(f"Filter shape: {self.h2df.shape}")
 
     @staticmethod
     def fft2d_torch(x):
@@ -76,17 +73,17 @@ class WKA(nn.Module):
         offsets = torch.arange(-Pi // 2, Pi // 2, dtype=torch.float64, device=self.device)
 
         # 扩展维度用于广播计算
-        delta_n_exp = delta_n.unsqueeze(2)  # [Na, Nr, 1]
-        offsets_exp = offsets.view(1, 1, -1)  # [1, 1, Pi]
+        delta_n_exp = delta_n.unsqueeze(2) # [Na, Nr, 1]
+        offsets_exp = offsets.view(1, 1, -1) # [1, 1, Pi]
 
         # 计算所有位置的索引
-        indices = torch.arange(self.config.Nr, device=self.device).view(1, -1, 1) + offsets_exp  # [1, Nr, Pi]
+        indices = torch.arange(self.config.Nr, device=self.device).view(1, -1, 1) + offsets_exp # [1, Nr, Pi]
 
         # 边界处理：越界索引设为边界值
         indices = indices.clamp(0, self.config.Nr - 1)
 
         # 计算sinc权重
-        diff = delta_n_exp - offsets_exp  # [Na, Nr, Pi]
+        diff = delta_n_exp - offsets_exp # [Na, Nr, Pi]
         sinc_weights = torch.sinc(diff)
 
         # 执行向量化插值，分批次处理方位向以避免内存溢出
@@ -124,6 +121,9 @@ class WKA(nn.Module):
         print("\nStarting optimized WKA processing...")
         start_time = time.time()
 
+        if sig.device != self.device:
+            sig = sig.to(self.device)
+
         # 1. 二维FFT变换到频域
         print("Performing FFT 2D...")
         s2df = self.fft2d_torch(sig)
@@ -142,7 +142,6 @@ class WKA(nn.Module):
 
         # 4. 二维IFFT到图像
         print("Performing IFFT 2D...")
-
         image = self.ifft2d_torch(s2df_stolt)
         print(f"Total processing time: {time.time() - start_time:.2f}s")
 
@@ -150,21 +149,17 @@ class WKA(nn.Module):
 
 
 if __name__ == "__main__":
-    sys.setrecursionlimit(10000)
-
     config = Config()
-
     generator = SignalGenerator(config)
 
     targets = [
-        (config.Xc, config.Yc),  # 场景中心
-        (config.Xc - 800, config.Yc + 100),
-        (config.Xc - 800, config.Yc - 200),
-        (config.Xc + 500, config.Yc - 200),
-        (config.Xc + 800, config.Yc - 100)
+        (config.Xc, config.Yc), # 场景中心
+        (config.Xc - 300, config.Yc + 100),
+        (config.Xc - 300, config.Yc - 200),
+        (config.Xc - 100, config.Yc - 100)
     ]
 
-    print("\nTarget positions:")
+    print("Target positions:")
     for i, (x, y) in enumerate(targets):
         print(f"  Target {i + 1}: x={x:.2f}m, y={y:.2f}m")
 
@@ -174,8 +169,8 @@ if __name__ == "__main__":
     gen_time = time.time() - start_time
     print(f"Signal generation completed in {gen_time:.2f} seconds")
 
+    # 处理信号
     wka = WKA(config)
-    print("\nProcessing SAR signal with wK algorithm...")
     s2df, s2df_matched, s2df_stolt, image = wka.forward(sar_signal)
 
     # 转换结果为NumPy数组
@@ -184,4 +179,5 @@ if __name__ == "__main__":
     image_np = torch.abs(image).detach().cpu().numpy()
 
     # 可视化函数绘图
-    visualize([sar_signal_np, s2df_matched_np, image_np])
+    visualize([sar_signal_np, s2df_matched_np, image_np],
+              ['Original Echo Signal', 'Matched Filtered Signal', 'Stolt Interpolated Signal'])
