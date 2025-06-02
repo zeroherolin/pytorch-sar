@@ -22,8 +22,8 @@ class Config:
         # 场景参数
         self.Xc = math.sqrt(self.R0 ** 2 - self.H ** 2)                # 场景中心X坐标 (m)
         self.Yc = 0                                                    # 场景中心Y坐标 (m)
-        self.Xo = 800                                                  # 场景半宽X (m)
-        self.Yo = 400                                                  # 场景半宽Y (m)
+        self.Xo = 1000                                                 # 场景半宽X (m)
+        self.Yo = 300                                                  # 场景半宽Y (m)
 
         # 采样参数
         self.Rmin = math.sqrt(self.H ** 2 + (self.Xc - self.Xo) ** 2)  # 最近斜距 (m)
