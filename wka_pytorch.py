@@ -112,7 +112,7 @@ class WKA(nn.Module):
             stolt_2df[m_slice, :] = stolt_batch
 
         # 参考距离平移
-        phase_comp = torch.exp(-1j * 4 * torch.pi * self.R_ref / self.c * self.f_tau)
+        phase_comp = torch.exp(-1j * 4 * torch.pi * self.R_ref / self.c * self.f_tau_pie)
         stolt_2df *= phase_comp
 
         return stolt_2df
