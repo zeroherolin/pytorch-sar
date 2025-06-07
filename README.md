@@ -34,11 +34,11 @@ $$f_\tau' = \sqrt{(f_0 + f_\tau)^2 - \left( \frac{c f_\eta} {2V_r}\right)^2} - f
 
 $$S_{\text{2df,stolt}}(f_\tau', f_\eta) = \text{Interp} _ {f _ \tau} \left( S_{\text{2df,matched}}(f_\tau, f_\eta) \to f_\tau' \right)$$
 
-$\text{sinc}$ 插值示例：  
+$\text{sinc}$ 插值示例：
 
-$$S_{\text{2df,stolt}}(f_\tau', f_\eta) = \sum_{n} S_{\text{2df,matched}}(f_{\tau,n}, f_\eta) \cdot \text{sinc}\left(\frac{f_\tau' - f_{\tau,n}}{\Delta f_\tau}\right)$$
+$$S_{\text{2df,stolt}}(f_\tau', f_\eta) = \sum_{k} S_{\text{2df,matched}}(f_{\tau,k}, f_\eta) \cdot \text{sinc}\left(\frac{f_\tau' - f_{\tau,k}}{\Delta f_\tau}\right)$$
 
-- 参数：距离频率采样间隔 $\Delta f_\tau = \frac{F_r}{N_r}$，第n个距离频率点 $f_{\tau,n} = -\frac{F_r}{2} + n \cdot \Delta f_\tau$
+- 参数：距离频率采样间隔 $\Delta f_\tau = \frac{F_r}{N_r}$，第k个距离频率点 $f_{\tau,k} = -\frac{F_r}{2} + k \cdot \Delta f_\tau$
 
 ### 4 参考距离平移
 
@@ -78,11 +78,11 @@ $$\tau' = \tau - \frac{2 R_{\text{ref}}} {c D(f_\eta, V_{r_{\text{ref}}})}$$
 
 变标方程： \tag{7.30}
 
-$$H_{CS}(\tau', f_\eta) = \exp \left( j \pi K_m \left[ \frac {D(f_{\eta_{\text{ref}}}, V_{r_{\text{ref}}})} {D(f_\eta, V_{r_{\text{ref}}})} - 1 \right] (\tau')^2 \right)$$
+$$H_{\text{cs}}(\tau', f_\eta) = \exp \left( j \pi K_m \left[ \frac {D(f_{\eta_{\text{ref}}}, V_{r_{\text{ref}}})} {D(f_\eta, V_{r_{\text{ref}}})} - 1 \right] (\tau')^2 \right)$$
 
 变标输出：
 
-$$S_{\eta f,\text{scaled}}(\tau, f_\eta) = H_{CS}(\tau', f_\eta) \cdot S_{\eta f}(\tau, f_\eta)$$
+$$S_{\eta f,\text{scaled}}(\tau, f_\eta) = H_{\text{cs}}(\tau', f_\eta) \cdot S_{\eta f}(\tau, f_\eta)$$
 
 - 参数：多普勒中心频率 $f_{\eta_{\text{ref}}} = \frac {2 V_{r_{\text{ref}}}} {\lambda} \sin{\theta_{s,\text{ref}}}$，改变后的距离向调频率 
 $K_m(f_\eta) = \frac{K_r}{1 - \dfrac{K_r c R_{\text{ref}} f_\eta^2}{2 V_r^2 f_0^3 \left[ D(f_\eta, V_r) \right]^3}}$
@@ -145,7 +145,7 @@ $$S_{rf}(f_\tau, \eta) = \text{FFT} _ \tau \left( \text{Sig}(\tau, \eta) \right)
 
 ### 2 距离压缩
 
-距离压缩滤波器：  
+距离压缩滤波器：
 
 $$H_{\text{rc}}(f_\tau) = \exp \left( j \pi \frac {f_\tau^2} {K_r} \right)$$
 
@@ -155,13 +155,13 @@ $$S_{rf,\text{comp}}(f_\tau, \eta) = H_{\text{rc}}(f_\tau) \cdot S_{rf}(f_\tau, 
 
 ### 3 距离向IFFT
 
-变换回距离时域-方位时域：  
+变换回距离时域-方位时域：
 
 $$S_{\text{rc}}(\tau, \eta) = \text{IFFT} _ \tau \left( S_{rf,\text{comp}}(f_\tau, \eta) \right)$$
 
 ### 4 方位向FFT
 
-变换到距离时域-方位频域（多普勒域）：  
+变换到距离时域-方位频域（多普勒域）：
 
 $$S_{\text{rd}}(\tau, f_\eta) = \text{FFT} _ \eta \left( S_{\text{rc}}(\tau, \eta) \right)$$
 
@@ -175,13 +175,15 @@ $$\Delta R(f_\eta) = \frac{\lambda^2 R_0 f_\eta^2} {8V_r^2}$$
 
 $$\Delta \tau(f_\eta) = \frac{2 \Delta R(f_\eta)}{c} = \frac{\lambda^2 R_0 f_\eta^2} {4cV_r^2}$$
 
-沿距离时间轴插值：  
+沿距离时间轴插值：
 
-$$S_{\text{rd,rmc}}(\tau, f_\eta) = \text{Interp} _ \tau \left( S_{\text{rd}}(\tau, f_\eta) \to \tau - \Delta \tau(f_\eta) \right)$$
+$$S_{\text{rd,rcmc}}(\tau, f_\eta) = \text{Interp} _ \tau \left( S_{\text{rd}}(\tau, f_\eta) \to \tau - \Delta \tau(f_\eta) \right)$$
 
 $\text{sinc}$ 插值示例：
 
-$$S_{\text{rd,rmc}}(\tau, f_\eta) = \sum_k S_{\text{rd}}(\tau_k, f_\eta) \cdot \text{sinc}\left[\frac{\tau - \Delta \tau(f_\eta) - \tau_k}{\Delta \tau}\right]$$
+$$S_{\text{rd,rcmc}}(\tau, f_\eta) = \sum_k S_{\text{rd}}(\tau_k, f_\eta) \cdot \text{sinc}\left[\frac{\tau - \Delta \tau(f_\eta) - \tau_k}{\Delta \tau}\right]$$
+
+- 参数：距离时间采样间隔 $\Delta \tau = \frac{1}{F_r}$，第k个距离时间点 $\tau_k = \tau_0 + k \cdot \Delta \tau$
 
 ### 6 方位压缩
 
@@ -191,10 +193,10 @@ $$H_{\text{ac}}(f_\eta) = \exp \left( j \frac{4\pi R_0} {\lambda} D(f_\eta, V_r)
 
 方位压缩输出：
 
-$$S_{\text{rd,ac}}(\tau, f_\eta) = H_{\text{ac}}(f_\eta) \cdot S_{\text{rd,rmc}}(\tau, f_\eta)$$
+$$S_{\text{rd,ac}}(\tau, f_\eta) = H_{\text{ac}}(f_\eta) \cdot S_{\text{rd,rcmc}}(\tau, f_\eta)$$
 
 ### 7 方位向IFFT
 
-变换回二维时域得到图像：  
+变换回二维时域得到图像：
 
 $$S_{\text{image}}(\tau, \eta) = \text{IFFT} _ \eta \left( S_{\text{rd,ac}}(\tau, f_\eta) \right)$$
