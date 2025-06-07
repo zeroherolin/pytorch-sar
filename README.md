@@ -2,9 +2,26 @@
 
 <img src="assets/flow.png" width=900/>
 
-## ωKA (Wavenumber Domain Algorithm)
+## Getting Started
 
-- [wka_pytorch](wka_pytorch.py)
+- Requirements
+
+`python==3.12` and `pytorch==2.4.0` are recommended
+
+- Run
+
+```bash
+# run wka
+python wka_pytorch.py
+
+# run csa
+python csa_pytorch.py
+
+# run rda
+python rda_pytorch.py
+```
+
+## ωKA (Wavenumber Domain Algorithm)
 
 ### 1 二维FFT
 
@@ -57,8 +74,6 @@ $$S_{\text{2df,comp}}(f_\tau, f_\eta) = \Phi_{\text{comp}}(f_\tau') \cdot S_{\te
 $$S_{\text{image}}(\tau, \eta) = \text{IFFT2} \left( S_{\text{2df,comp}}(f_\tau, f_\eta) \right)$$
 
 ## CSA (Chirp Scaling Algorithm)
-
-- [csa_pytorch](csa_pytorch.py)
 
 ### 1 方位向FFT
 
@@ -134,8 +149,6 @@ $$S_{\eta f,\text{ac}}(\tau, f_\eta) = H_p(\tau, f_\eta) \cdot H_{\text{ac}}(f_\
 $$S_{\text{image}}(\tau, \eta) = \text{IFFT} _ \eta \left( S_{\eta f,\text{ac}}(\tau, f_\eta) \right)$$
 
 ## RDA (Range Doppler Algorithm)
-
-- [rda_pytorch](rda_pytorch.py)
 
 ### 1 距离向FFT
 
