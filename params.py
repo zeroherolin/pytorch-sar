@@ -33,5 +33,5 @@ class Config:
         self.Nr = None                                                 # 距离向采样点数 (将在信号生成时设置)
 
         # 参考参数
-        self.theta_c = 0                                               # 波束中心斜视角 (rad)
+        self.theta_c = 0 /180 * math.pi                                # 波束中心斜视角 (rad)
         self.R_ref = self.R0                                           # 参考距离 (m)
