@@ -127,29 +127,29 @@ class WKA(nn.Module):
             sig = sig.to(self.device)
 
         # 1. 二维FFT变换到频域
-        print("Performing FFT 2D...")
+        print("- Performing FFT 2D...")
         S_2df = self.fft2d(sig)
-        print(f"2D FFT completed at {time.time() - start_time:.6f}s")
+        print(f"    FFT 2D completed at {time.time() - start_time:.6f}s")
 
         # 2. 频域匹配滤波
-        print("Performing Matched Filtering...")
+        print("- Performing Matched Filtering...")
         S_2df_matched = self.matched_filtering(S_2df)
-        print(f"Matched filtering completed at {time.time() - start_time:.6f}s")
+        print(f"    Matched Filtering completed at {time.time() - start_time:.6f}s")
 
         # 3. Stolt插值
-        print("Performing Stolt Interpolation...")
+        print("- Performing Stolt Interpolation...")
         S_2df_stolt = self.stolt_interpolation(S_2df_matched)
-        print(f"Stolt interpolation completed at {time.time() - start_time:.6f}s")
+        print(f"    Stolt Interpolation completed at {time.time() - start_time:.6f}s")
 
         # 4. 参考距离平移补偿
-        print("Performing Reference Shift Compensation...")
+        print("- Performing Reference Shift Compensation...")
         S_2df_comp = self.reference_shift_compensation(S_2df_stolt)
-        print(f"Reference shift compensation completed at {time.time() - start_time:.6f}s")
+        print(f"    Reference Shift Compensation completed at {time.time() - start_time:.6f}s")
 
         # 5. 二维IFFT到图像
-        print("Performing IFFT 2D...")
+        print("- Performing IFFT 2D...")
         image = self.ifft2d(S_2df_comp)
-        print(f"Total processing time: {time.time() - start_time:.6f}s")
+        print(f"    Total processing time: {time.time() - start_time:.6f}s")
 
         return S_2df, S_2df_matched, S_2df_stolt, image
 
@@ -173,8 +173,8 @@ if __name__ == "__main__":
     start_time = time.time()
     sar_signal = generator.generate_signal(targets)
     gen_time = time.time() - start_time
-    print(f"Signal generation completed in {gen_time:.6f} seconds")
-    print(f"  Na: {config.Na}    Nr: {config.Nr}")
+    print(f"Signal generation completed in {gen_time:.6f}s")
+    print(f"  Na: {config.Na}    Nr: {config.Nr}\n")
 
     # 处理信号
     wka = WKA(config)

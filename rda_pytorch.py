@@ -149,39 +149,39 @@ class RDA(nn.Module):
             sig = sig.to(self.device)
 
         # 1. 距离向FFT
-        print("Performing Range FFT...")
+        print("- Performing Range FFT...")
         S_rf = self.range_fft(sig)
-        print(f"Range FFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Range FFT completed at {time.time() - start_time:.6f}s")
 
         # 2. 距离压缩
-        print("Performing Range Compression...")
+        print("- Performing Range Compression...")
         S_rf_comp = self.range_compression(S_rf)
-        print(f"Range Compression completed at {time.time() - start_time:.6f}s")
+        print(f"    Range Compression completed at {time.time() - start_time:.6f}s")
 
         # 3. 距离向IFFT
-        print("Performing Range IFFT...")
+        print("- Performing Range IFFT...")
         S_rc = self.range_ifft(S_rf_comp)
-        print(f"Range IFFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Range IFFT completed at {time.time() - start_time:.6f}s")
 
         # 4. 方位向FFT
-        print("Performing Azimuth FFT...")
+        print("- Performing Azimuth FFT...")
         S_rd = self.azimuth_fft(S_rc)
-        print(f"Azimuth FFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Azimuth FFT completed at {time.time() - start_time:.6f}s")
 
         # 5. 距离徙动校正 (RCMC)
-        print("Performing Range Cell Migration Correction (RCMC)...")
+        print("- Performing Range Cell Migration Correction (RCMC)...")
         S_rd_rcmc = self.rcmc_interpolation(S_rd)
-        print(f"RCMC completed at {time.time() - start_time:.6f}s")
+        print(f"    RCMC completed at {time.time() - start_time:.6f}s")
 
         # 6. 方位压缩
-        print("Performing Azimuth Compression...")
+        print("- Performing Azimuth Compression...")
         S_rd_ac = self.azimuth_compression(S_rd_rcmc)
-        print(f"Azimuth Compression completed at {time.time() - start_time:.6f}s")
+        print(f"    Azimuth Compression completed at {time.time() - start_time:.6f}s")
 
         # 7. 方位向IFFT
-        print("Performing Azimuth IFFT...")
+        print("- Performing Azimuth IFFT...")
         S_image = self.azimuth_ifft(S_rd_ac)
-        print(f"Total processing time: {time.time() - start_time:.6f}s")
+        print(f"    Total processing time: {time.time() - start_time:.6f}s")
 
         return S_rf_comp, S_rd_rcmc, S_image
 
@@ -205,8 +205,8 @@ if __name__ == "__main__":
     start_time = time.time()
     sar_signal = generator.generate_signal(targets)
     gen_time = time.time() - start_time
-    print(f"Signal generation completed in {gen_time:.6f} seconds")
-    print(f"  Na: {config.Na}    Nr: {config.Nr}")
+    print(f"Signal generation completed in {gen_time:.6f}s")
+    print(f"  Na: {config.Na}    Nr: {config.Nr}\n")
 
     # 处理信号
     rda = RDA(config)

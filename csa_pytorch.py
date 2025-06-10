@@ -119,39 +119,39 @@ class CSA(nn.Module):
             sig = sig.to(self.device)
 
         # 1. 方位向FFT
-        print("Performing Azimuth FFT...")
+        print("- Performing Azimuth FFT...")
         S_eta_f = self.azimuth_fft(sig)
-        print(f"Azimuth FFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Azimuth FFT completed at {time.time() - start_time:.6f}s")
 
         # 2. Chirp Scaling操作
-        print("Performing Chirp Scaling...")
+        print("- Performing Chirp Scaling...")
         S_eta_f_scaled = self.chirp_scaling(S_eta_f, self.tau_mtx)
-        print(f"Chirp Scaling completed at {time.time() - start_time:.6f}s")
+        print(f"    Chirp Scaling completed at {time.time() - start_time:.6f}s")
 
         # 3. 距离向FFT
-        print("Performing Range FFT...")
+        print("- Performing Range FFT...")
         S_2df_scaled = self.range_fft(S_eta_f_scaled)
-        print(f"Range FFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Range FFT completed at {time.time() - start_time:.6f}s")
 
         # 4. 距离压缩+SRC+RCMC
-        print("Performing Range Compression, SRC & RCMC...")
+        print("- Performing Range Compression, SRC & RCMC...")
         S_2df_comp = self.range_processing(S_2df_scaled)
-        print(f"Range Compression, SRC & RCMC completed at {time.time() - start_time:.6f}s")
+        print(f"    Range Compression, SRC & RCMC completed at {time.time() - start_time:.6f}s")
 
         # 5. 距离向IFFT
-        print("Performing Range IFFT...")
+        print("- Performing Range IFFT...")
         S_eta_f_comp = self.range_ifft(S_2df_comp)
-        print(f"Range IFFT completed at {time.time() - start_time:.6f}s")
+        print(f"    Range IFFT completed at {time.time() - start_time:.6f}s")
 
         # 6. 方位向压缩
-        print("Performing Azimuth Compression...")
+        print("- Performing Azimuth Compression...")
         S_eta_f_ac = self.azimuth_compression(S_eta_f_comp)
-        print(f"Azimuth Compression completed at {time.time() - start_time:.6f}s")
+        print(f"    Azimuth Compression completed at {time.time() - start_time:.6f}s")
 
         # 7. 方位向IFFT
-        print("Performing Azimuth IFFT...")
+        print("- Performing Azimuth IFFT...")
         S_image = self.azimuth_ifft(S_eta_f_ac)
-        print(f"Total processing time: {time.time() - start_time:.6f}s")
+        print(f"    Total processing time: {time.time() - start_time:.6f}s")
 
         return S_2df_scaled, S_2df_comp, S_image
 
@@ -175,8 +175,8 @@ if __name__ == "__main__":
     start_time = time.time()
     sar_signal = generator.generate_signal(targets)
     gen_time = time.time() - start_time
-    print(f"Signal generation completed in {gen_time:.6f} seconds")
-    print(f"  Na: {config.Na}    Nr: {config.Nr}")
+    print(f"Signal generation completed in {gen_time:.6f}s")
+    print(f"  Na: {config.Na}    Nr: {config.Nr}\n")
 
     # 处理信号
     csa = CSA(config)
