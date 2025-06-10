@@ -174,6 +174,7 @@ if __name__ == "__main__":
     sar_signal = generator.generate_signal(targets)
     gen_time = time.time() - start_time
     print(f"Signal generation completed in {gen_time:.6f} seconds")
+    print(f"  Na: {config.Na}    Nr: {config.Nr}")
 
     # 处理信号
     wka = WKA(config)
